@@ -23,7 +23,7 @@ WORKDIR /
 COPY --from=builder /app/server /server 
 
 EXPOSE 8080
-USER nonroot:nonroot
+# USER nonroot:nonroot
 
 #entrypoint that runs when you run the docker container
 ENTRYPOINT ["/server"]
