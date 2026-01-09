@@ -1,0 +1,26 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: notes
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # optional: lets you connect from your laptop using psql on localhost:5432
+    ports:
+      - "5432:5432"
+
+  api:
+    build: .
+    environment:
+      PORT: "8080"
+      # key point: host is "db" (service name), NOT localhost
+      DATABASE_URL: "postgres://app:app@db:5432/notes?sslmode=disable"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+
+volumes:
+  pgdata:
