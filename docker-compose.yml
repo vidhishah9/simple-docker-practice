@@ -1,4 +1,6 @@
 services:
+  # Starting a container named "db" using the official Postgres image
+  # Postres will store all it's data in a named volume "pgdata"
   db:
     image: postgres:16
     environment:
@@ -10,15 +12,16 @@ services:
     # optional: lets you connect from your laptop using psql on localhost:5432
     ports:
       - "5432:5432"
-
+  #Starts the Go API contianer where the server will run to listen to requests. Listens to port 8080 INSIDE the container for requests
   api:
     build: .
     environment:
       PORT: "8080"
       # key point: host is "db" (service name), NOT localhost
-      DATABASE_URL: "postgres://app:app@db:5432/notes?sslmode=disable"
+      DATABASE_URL: "postgres://app:app@db:5432/notes?sslmode=disable" #connect to container named db on port 5432
     ports:
-      - "8080:8080"
+      - "8080:8080" #listen on port 8080 on the host machine and forward to port 8080 in the container
+    #start db service first before starting api service (does not guarantee db is fully ready)
     depends_on:
       - db
 

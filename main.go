@@ -22,11 +22,14 @@ type Note struct {
 
 func main() {
 	port := env("PORT", "8080")
+
+	// get database url from the environment
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		log.Fatal("DATABASE_URL is required")
 	}
-
+	
+	//make a pgx connection pool
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
@@ -34,7 +37,7 @@ func main() {
 	}
 	defer pool.Close()
 
-	// wait briefly for DB to be ready
+	// wait briefly for Postgres DB to be ready by pinging it and retrying if needed
 	for i := 0; i < 25; i++ {
 		if err := pool.Ping(ctx); err == nil {
 			break
@@ -42,7 +45,7 @@ func main() {
 		time.Sleep(400 * time.Millisecond)
 	}
 
-	// create table if not exists (keeps project simple; later you can do migrations)
+	// create notes table if not exists with SQL
 	_, err = pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS notes (
 			id SERIAL PRIMARY KEY,
@@ -57,6 +60,7 @@ func main() {
 
 	mux := http.NewServeMux()
 
+	//health check endpoint to check if server is running
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
@@ -81,12 +85,15 @@ func main() {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		//parse the id from the url
 		idStr := strings.TrimPrefix(r.URL.Path, "/notes/")
 		id, err := strconv.Atoi(idStr)
 		if err != nil || id <= 0 {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
+
+		//delete the note from the DB
 		deleteNote(w, r, pool, id)
 	})
 
@@ -94,7 +101,8 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
 
-func createNote(w http.ResponseWriter, r *http.Request, pool *pgxpool.Pool) {
+func createNote(w http.ResponseWriter, r *http.Request, pool *pgxpool.Pool) {\
+	//parse input JSON
 	var in struct {
 		Title string `json:"title"`
 		Body  string `json:"body"`
@@ -109,11 +117,13 @@ func createNote(w http.ResponseWriter, r *http.Request, pool *pgxpool.Pool) {
 		http.Error(w, "title and body required", http.StatusBadRequest)
 		return
 	}
-
+	//timeout context for db operation
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
 
 	var n Note
+
+	//insert row into DB and return the created note
 	err := pool.QueryRow(ctx,
 		`INSERT INTO notes(title, body) VALUES ($1, $2) RETURNING id, title, body, created_at`,
 		in.Title, in.Body,
@@ -127,9 +137,11 @@ func createNote(w http.ResponseWriter, r *http.Request, pool *pgxpool.Pool) {
 }
 
 func listNotes(w http.ResponseWriter, r *http.Request, pool *pgxpool.Pool) {
+	//timeout context for db operation
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
 
+	//query all notes from DB
 	rows, err := pool.Query(ctx, `SELECT id, title, body, created_at FROM notes ORDER BY id DESC`)
 	if err != nil {
 		http.Error(w, "db query failed", http.StatusInternalServerError)
